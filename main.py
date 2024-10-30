@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QTableWidget, QTableWidgetItem, QComboBox,
                              QMessageBox, QInputDialog, QSystemTrayIcon, QMenu,
                              QStyle, QDialog, QTabWidget, QSpinBox, QCheckBox,
-                             QFormLayout, QColorDialog, QFontDialog)
+                             QFormLayout, QColorDialog, QFontDialog, QStackedWidget, QFileDialog)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont, QKeyEvent
 import speech_recognition as sr
@@ -630,23 +630,8 @@ class MainWindow(QMainWindow):
             json.dump(self.commands, file, ensure_ascii=False, indent=4)
 
     def addCommand(self):
-        category, ok = QInputDialog.getItem(
-            self, 'Добавить команду', 'Выберите категорию:',
-            ['системные', 'приложения'], 0, False)
-
-        if ok:
-            command, ok = QInputDialog.getText(
-                self, 'Добавить команду', 'Введите команду:')
-            if ok and command:
-                action, ok = QInputDialog.getText(
-                    self, 'Добавить команду', 'Введите действие:')
-                if ok and action:
-                    if category not in self.commands:
-                        self.commands[category] = {}
-                    self.commands[category][command] = action
-                    self.saveCommands()
-                    self.updateCommandTable()
-                    self.logMessage(f"Добавлена новая команда: {command}")
+        dialog = CommandConstructorDialog(self)
+        dialog.exec_()
 
     def removeCommand(self):
         current_row = self.command_table.currentRow()
@@ -672,18 +657,45 @@ class MainWindow(QMainWindow):
                 action = commands[text]
                 self.logMessage(f"Выполняется команда: {action}")
 
-                if action == "shutdown":
-                    os.system("shutdown /s /t 60")
-                    self.speak("Компьютер будет выключен через минуту")
-                elif action == "restart":
-                    os.system("shutdown /r /t 60")
-                    self.speak("Компьютер будет перезагружен через минуту")
-                elif action == "browser":
-                    webbrowser.open('http://google.com')
-                    self.speak("Открываю браузер")
-                elif action == "notepad":
-                    os.system("notepad")
-                    self.speak("Открываю блокнот")
+                try:
+                    if action.startswith("system:"):
+                        command = action.replace("system:", "", 1)
+                        os.system(command)
+                        self.speak("Выполняю системную команду")
+
+                    elif action.startswith("app:"):
+                        path = action.replace("app:", "", 1)
+                        os.startfile(path)
+                        self.speak("Запускаю приложение")
+
+                    elif action.startswith("url:"):
+                        url = action.replace("url:", "", 1)
+                        webbrowser.open(url)
+                        self.speak("Открываю веб-страницу")
+
+                    elif action.startswith("script:"):
+                        script = action.replace("script:", "", 1)
+                        exec(script)
+                        self.speak("Выполняю скрипт")
+
+                    else:
+                        # Поддержка старых команд
+                        if action == "shutdown":
+                            os.system("shutdown /s /t 60")
+                            self.speak("Компьютер будет выключен через минуту")
+                        elif action == "restart":
+                            os.system("shutdown /r /t 60")
+                            self.speak("Компьютер будет перезагружен через минуту")
+                        elif action == "browser":
+                            webbrowser.open('http://google.com')
+                            self.speak("Открываю браузер")
+                        elif action == "notepad":
+                            os.system("notepad")
+                            self.speak("Открываю блокнот")
+
+                except Exception as e:
+                    self.logMessage(f"Ошибка при выполнении команды: {str(e)}")
+                    self.speak("Произошла ошибка при выполнении команды")
                 break
 
     def speak(self, text):
@@ -719,6 +731,142 @@ class CommandTextEdit(QTextEdit):
             self.parent.sendTextCommand()
         else:
             super().keyPressEvent(event)
+
+
+class CommandConstructorDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle('Конструктор команд')
+        self.setMinimumWidth(500)
+        layout = QVBoxLayout(self)
+
+        # Выбор категории
+        category_layout = QHBoxLayout()
+        category_label = QLabel('Категория:')
+        self.category_combo = QComboBox()
+        self.category_combo.addItems(['системные', 'приложения'])
+        self.category_combo.setEditable(True)
+        category_layout.addWidget(category_label)
+        category_layout.addWidget(self.category_combo)
+        layout.addLayout(category_layout)
+
+        # Ввод команды
+        command_layout = QHBoxLayout()
+        command_label = QLabel('Команда:')
+        self.command_input = QTextEdit()
+        self.command_input.setMaximumHeight(50)
+        command_layout.addWidget(command_label)
+        command_layout.addWidget(self.command_input)
+        layout.addLayout(command_layout)
+
+        # Выбор типа действия
+        action_type_layout = QHBoxLayout()
+        action_type_label = QLabel('Тип действия:')
+        self.action_type_combo = QComboBox()
+        self.action_type_combo.addItems(
+            ['Системная команда', 'Открытие приложения', 'Открытие URL', 'Пользовательский скрипт'])
+        self.action_type_combo.currentIndexChanged.connect(self.onActionTypeChanged)
+        action_type_layout.addWidget(action_type_label)
+        action_type_layout.addWidget(self.action_type_combo)
+        layout.addLayout(action_type_layout)
+
+        # Стек виджетов для разных типов действий
+        self.action_stack = QStackedWidget()
+
+        # Системная команда
+        system_widget = QWidget()
+        system_layout = QVBoxLayout(system_widget)
+        self.system_command_input = QTextEdit()
+        system_layout.addWidget(QLabel('Введите системную команду:'))
+        system_layout.addWidget(self.system_command_input)
+
+        # Открытие приложения
+        app_widget = QWidget()
+        app_layout = QVBoxLayout(app_widget)
+        self.app_path_input = QTextEdit()
+        browse_btn = QPushButton('Обзор...')
+        browse_btn.clicked.connect(self.browseApplication)
+        app_layout.addWidget(QLabel('Путь к приложению:'))
+        app_layout.addWidget(self.app_path_input)
+        app_layout.addWidget(browse_btn)
+
+        # URL
+        url_widget = QWidget()
+        url_layout = QVBoxLayout(url_widget)
+        self.url_input = QTextEdit()
+        url_layout.addWidget(QLabel('Введите URL:'))
+        url_layout.addWidget(self.url_input)
+
+        # Пользовательский скрипт
+        script_widget = QWidget()
+        script_layout = QVBoxLayout(script_widget)
+        self.script_input = QTextEdit()
+        script_layout.addWidget(QLabel('Введите Python-скрипт:'))
+        script_layout.addWidget(self.script_input)
+
+        self.action_stack.addWidget(system_widget)
+        self.action_stack.addWidget(app_widget)
+        self.action_stack.addWidget(url_widget)
+        self.action_stack.addWidget(script_widget)
+
+        layout.addWidget(self.action_stack)
+
+        # Кнопки
+        buttons_layout = QHBoxLayout()
+        save_btn = QPushButton('Сохранить')
+        save_btn.clicked.connect(self.saveCommand)
+        cancel_btn = QPushButton('Отмена')
+        cancel_btn.clicked.connect(self.reject)
+        buttons_layout.addWidget(save_btn)
+        buttons_layout.addWidget(cancel_btn)
+        layout.addLayout(buttons_layout)
+
+    def onActionTypeChanged(self, index):
+        self.action_stack.setCurrentIndex(index)
+
+    def browseApplication(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, 'Выберите приложение', '',
+                                                   'Executable files (*.exe);;All files (*.*)')
+        if file_name:
+            self.app_path_input.setText(file_name)
+
+    def saveCommand(self):
+        category = self.category_combo.currentText()
+        command = self.command_input.toPlainText().strip()
+
+        if not category or not command:
+            QMessageBox.warning(self, 'Ошибка', 'Заполните все поля')
+            return
+
+        action_type = self.action_type_combo.currentIndex()
+        action = ""
+
+        if action_type == 0:  # Системная команда
+            action = f"system:{self.system_command_input.toPlainText()}"
+        elif action_type == 1:  # Приложение
+            action = f"app:{self.app_path_input.toPlainText()}"
+        elif action_type == 2:  # URL
+            action = f"url:{self.url_input.toPlainText()}"
+        elif action_type == 3:  # Скрипт
+            action = f"script:{self.script_input.toPlainText()}"
+
+        if not action:
+            QMessageBox.warning(self, 'Ошибка', 'Заполните действие')
+            return
+
+        if category not in self.parent.commands:
+            self.parent.commands[category] = {}
+
+        self.parent.commands[category][command] = action
+        self.parent.saveCommands()
+        self.parent.updateCommandTable()
+        self.parent.logMessage(f"Добавлена новая команда: {command}")
+
+        self.accept()
 
 def main():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
