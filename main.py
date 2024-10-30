@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QStyle, QDialog, QTabWidget, QSpinBox, QCheckBox,
                              QFormLayout, QColorDialog, QFontDialog)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtGui import QIcon, QFont
+from PyQt5.QtGui import QIcon, QFont, QKeyEvent
 import speech_recognition as sr
 import pyttsx3
 import json
@@ -375,7 +375,43 @@ class MainWindow(QMainWindow):
         control_layout.addWidget(self.stop_button)
         layout.addWidget(control_panel)
 
-            # Таблица команд
+        # Добавить текстовую панель ввода команд
+        text_input_panel = QWidget()
+        text_input_layout = QHBoxLayout(text_input_panel)
+
+        self.command_input = CommandTextEdit(self)
+        self.command_input.setMaximumHeight(50)
+        self.command_input.setPlaceholderText("Введите команду здесь...")
+        self.command_input.setStyleSheet("""
+            QTextEdit {
+                background-color: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 5px;
+            }
+        """)
+
+        send_button = QPushButton('Отправить')
+        send_button.clicked.connect(self.sendTextCommand)
+        send_button.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
+
+        text_input_layout.addWidget(self.command_input)
+        text_input_layout.addWidget(send_button)
+        layout.addWidget(text_input_panel)
+
+        # Таблица команд
         commands_label = QLabel("Список доступных команд:")
         commands_label.setStyleSheet("font-weight: bold; font-size: 12px;")
         layout.addWidget(commands_label)
@@ -477,6 +513,13 @@ class MainWindow(QMainWindow):
     def showSettings(self):
         settings_dialog = SettingsDialog(self)
         settings_dialog.exec_()
+
+    def sendTextCommand(self):
+        text = self.command_input.toPlainText().strip().lower()
+        if text:
+            self.logMessage(f"Введена команда: {text}")
+            self.executeCommand(text)
+            self.command_input.clear()
 
     def applySettings(self, settings):
         if hasattr(self, 'engine'):
@@ -665,6 +708,17 @@ class MainWindow(QMainWindow):
             if self.voice_thread.is_listening:
                 self.voice_thread.stop()
             event.accept()
+
+class CommandTextEdit(QTextEdit):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent
+
+    def keyPressEvent(self, event: QKeyEvent):
+        if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
+            self.parent.sendTextCommand()
+        else:
+            super().keyPressEvent(event)
 
 def main():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
