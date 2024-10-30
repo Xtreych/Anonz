@@ -2,13 +2,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
-                             QHBoxLayout, QPushButton, QLabel, QTextEdit,
-                             QTableWidget, QTableWidgetItem, QComboBox,
-                             QMessageBox, QInputDialog, QSystemTrayIcon, QMenu,
-                             QStyle, QDialog, QTabWidget, QSpinBox, QCheckBox,
-                             QFormLayout, QColorDialog, QFontDialog, QStackedWidget, QFileDialog)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QIcon, QFont, QKeyEvent
 import speech_recognition as sr
 import pyttsx3
@@ -21,6 +16,128 @@ import webbrowser
 import sys
 import winreg as reg
 import sounddevice as sd
+
+
+class ThemeManager:
+    def __init__(self):
+        self.light_theme = """
+            QMainWindow, QDialog {
+                background-color: #f5f5f5;
+            }
+            QTabWidget::pane {
+                border: 1px solid #ddd;
+                background: #f5f5f5;
+            }
+            QTabBar::tab {
+                background: #e0e0e0;
+                padding: 8px 16px;
+                margin: 2px;
+                border-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #2196F3;
+                color: white;
+            }
+            QLabel {
+                color: #333;
+            }
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QTableWidget {
+                background: white;
+                border: 1px solid #ddd;
+            }
+            QTextEdit {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            QComboBox {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QSpinBox {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QCheckBox {
+                color: #333;
+            }
+        """
+
+        self.dark_theme = """
+            QMainWindow, QDialog {
+                background-color: #1e1e1e;
+            }
+            QTabWidget::pane {
+                border: 1px solid #333;
+                background: #1e1e1e;
+            }
+            QTabBar::tab {
+                background: #2d2d2d;
+                color: #ddd;
+                padding: 8px 16px;
+                margin: 2px;
+                border-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #0d47a1;
+                color: white;
+            }
+            QLabel {
+                color: #ddd;
+            }
+            QPushButton {
+                background-color: #0d47a1;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+            QTableWidget {
+                background: #2d2d2d;
+                color: #ddd;
+                border: 1px solid #333;
+            }
+            QTextEdit {
+                background: #2d2d2d;
+                color: #ddd;
+                border: 1px solid #333;
+                border-radius: 4px;
+            }
+            QComboBox {
+                background: #2d2d2d;
+                color: #ddd;
+                border: 1px solid #333;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QSpinBox {
+                background: #2d2d2d;
+                color: #ddd;
+                border: 1px solid #333;
+                border-radius: 4px;
+                padding: 5px;
+            }
+            QCheckBox {
+                color: #ddd;
+            }
+        """
 
 
 class VoiceThread(QThread):
@@ -59,422 +176,386 @@ class VoiceThread(QThread):
         self.is_listening = False
         self.wait()
 
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.parent = parent
-        self.initUI()
-        self.loadSettings()
-
-    def initUI(self):
-        self.setWindowTitle('Настройки')
-        self.setMinimumWidth(400)
-
-        layout = QVBoxLayout(self)
-
-        # Создаем вкладки
-        tabs = QTabWidget()
-        layout.addWidget(tabs)
-
-        # Вкладка общих настроек
-        general_tab = QWidget()
-        general_layout = QFormLayout(general_tab)
-
-        self.voice_speed = QSpinBox()
-        self.voice_speed.setRange(50, 300)
-        general_layout.addRow('Скорость речи:', self.voice_speed)
-
-        self.voice_volume = QSpinBox()
-        self.voice_volume.setRange(0, 100)
-        general_layout.addRow('Громкость речи (%):', self.voice_volume)
-
-        self.autostart = QCheckBox('Запускать при старте Windows')
-        general_layout.addRow(self.autostart)
-
-        self.minimize_to_tray = QCheckBox('Сворачивать в трей')
-        general_layout.addRow(self.minimize_to_tray)
-
-        tabs.addTab(general_tab, "Общие")
-
-        # Вкладка аудио настроек
-        audio_tab = QWidget()
-        audio_layout = QFormLayout(audio_tab)
-
-        self.output_devices = QComboBox()
-        self.loadOutputDevices()
-        audio_layout.addRow('Устройство вывода звука:', self.output_devices)
-
-        self.input_devices = QComboBox()
-        self.loadInputDevices()
-        audio_layout.addRow('Устройство ввода звука (микрофон):', self.input_devices)
-
-        refresh_btn = QPushButton('Обновить список устройств')
-        refresh_btn.clicked.connect(self.refreshDevices)
-        audio_layout.addRow(refresh_btn)
-
-        tabs.addTab(audio_tab, "Аудио")
-
-        # Вкладка настроек распознавания
-        recognition_tab = QWidget()
-        recognition_layout = QFormLayout(recognition_tab)
-
-        self.language = QComboBox()
-        self.language.addItems(['Русский', 'English'])
-        recognition_layout.addRow('Язык распознавания:', self.language)
-
-        self.continuous_recognition = QCheckBox('Непрерывное распознавание')
-        recognition_layout.addRow(self.continuous_recognition)
-
-        self.noise_reduction = QCheckBox('Шумоподавление')
-        recognition_layout.addRow(self.noise_reduction)
-
-        tabs.addTab(recognition_tab, "Распознавание")
-
-        # Вкладка настроек интерфейса
-        interface_tab = QWidget()
-        interface_layout = QFormLayout(interface_tab)
-
-        self.choose_color_btn = QPushButton('Выбрать цвет интерфейса')
-        self.choose_color_btn.clicked.connect(self.chooseColor)
-        interface_layout.addRow(self.choose_color_btn)
-
-        self.choose_font_btn = QPushButton('Выбрать шрифт')
-        self.choose_font_btn.clicked.connect(self.chooseFont)
-        interface_layout.addRow(self.choose_font_btn)
-
-        tabs.addTab(interface_tab, "Интерфейс")
-
-        # Кнопки
-        buttons_layout = QHBoxLayout()
-
-        apply_btn = QPushButton('Применить')
-        apply_btn.clicked.connect(self.applySettings)
-
-        cancel_btn = QPushButton('Отмена')
-        cancel_btn.clicked.connect(self.reject)
-
-        buttons_layout.addStretch()
-        buttons_layout.addWidget(apply_btn)
-        buttons_layout.addWidget(cancel_btn)
-
-        layout.addLayout(buttons_layout)
-
-    def loadOutputDevices(self):
-        self.output_devices.clear()
-        try:
-            devices = sd.query_devices()
-            for device in devices:
-                if device['max_output_channels'] > 0:
-                    self.output_devices.addItem(device['name'], device['index'])
-
-            default_device = sd.query_devices(kind='output')
-            default_index = self.output_devices.findText(default_device['name'])
-            if default_index >= 0:
-                self.output_devices.setCurrentIndex(default_index)
-
-        except Exception as e:
-            self.output_devices.addItem("Ошибка загрузки устройств")
-            logging.error(f"Ошибка при загрузке устройств вывода: {str(e)}")
-
-    def loadInputDevices(self):
-        self.input_devices.clear()
-        try:
-            devices = sd.query_devices()
-            for device in devices:
-                if device['max_input_channels'] > 0:
-                    self.input_devices.addItem(device['name'], device['index'])
-
-            default_device = sd.query_devices(kind='input')
-            default_index = self.input_devices.findText(default_device['name'])
-            if default_index >= 0:
-                self.input_devices.setCurrentIndex(default_index)
-
-        except Exception as e:
-            self.input_devices.addItem("Ошибка загрузки устройств")
-            logging.error(f"Ошибка при загрузке устройств ввода: {str(e)}")
-
-    def refreshDevices(self):
-        self.loadOutputDevices()
-        self.loadInputDevices()
-        QMessageBox.information(self, 'Обновление', 'Список устройств обновлен')
-
-    def loadSettings(self):
-        try:
-            with open('settings.json', 'r', encoding='utf-8') as f:
-                settings = json.load(f)
-                self.voice_speed.setValue(settings.get('voice_speed', 180))
-                self.voice_volume.setValue(settings.get('voice_volume', 100))
-                self.autostart.setChecked(settings.get('autostart', False))
-                self.minimize_to_tray.setChecked(settings.get('minimize_to_tray', True))
-                self.language.setCurrentText(settings.get('language', 'Русский'))
-                self.continuous_recognition.setChecked(settings.get('continuous_recognition', True))
-                self.noise_reduction.setChecked(settings.get('noise_reduction', True))
-
-                # Загрузка настроек аудио устройств
-                output_device = settings.get('output_device', {})
-                input_device = settings.get('input_device', {})
-
-                if output_device:
-                    index = self.output_devices.findText(output_device.get('name', ''))
-                    if index >= 0:
-                        self.output_devices.setCurrentIndex(index)
-
-                if input_device:
-                    index = self.input_devices.findText(input_device.get('name', ''))
-                    if index >= 0:
-                        self.input_devices.setCurrentIndex(index)
-
-        except FileNotFoundError:
-            self.setDefaultSettings()
-
-    def setDefaultSettings(self):
-        self.voice_speed.setValue(180)
-        self.voice_volume.setValue(100)
-        self.autostart.setChecked(False)
-        self.minimize_to_tray.setChecked(True)
-        self.language.setCurrentText('Русский')
-        self.continuous_recognition.setChecked(True)
-        self.noise_reduction.setChecked(True)
-
-    def chooseColor(self):
-        color = QColorDialog.getColor()
-        if color.isValid():
-            self.parent.setStyleSheet(f'QMainWindow {{ background-color: {color.name()}; }}')
-
-    def chooseFont(self):
-        font, ok = QFontDialog.getFont()
-        if ok:
-            self.parent.setFont(font)
-
-    def applySettings(self):
-        settings = {
-            'voice_speed': self.voice_speed.value(),
-            'voice_volume': self.voice_volume.value(),
-            'autostart': self.autostart.isChecked(),
-            'minimize_to_tray': self.minimize_to_tray.isChecked(),
-            'language': self.language.currentText(),
-            'continuous_recognition': self.continuous_recognition.isChecked(),
-            'noise_reduction': self.noise_reduction.isChecked(),
-            'output_device': {
-                'name': self.output_devices.currentText(),
-                'index': self.output_devices.currentData()
-            },
-            'input_device': {
-                'name': self.input_devices.currentText(),
-                'index': self.input_devices.currentData()
-            }
-        }
-
-        with open('settings.json', 'w', encoding='utf-8') as f:
-            json.dump(settings, f, ensure_ascii=False, indent=4)
-
-        self.parent.applySettings(settings)
-        self.accept()
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.theme_manager = ThemeManager()
+        self.current_theme = "light"
         self.initUI()
         self.loadCommands()
         self.initVoiceAssistant()
         self.initTrayIcon()
         self.setupLogging()
         self.loadSettings()
+        self.populateAudioDevices()
+
+    def sendTextCommand(self):
+        text = self.command_input.toPlainText().strip()
+        if text:
+            self.logMessage(f"Введена команда: {text}")
+            self.executeCommand(text)
+            self.command_input.clear()
+
+    def populateAudioDevices(self):
+        try:
+            # Получение списка аудио устройств
+            devices = sd.query_devices()
+
+            # Очистка комбобоксов
+            self.output_devices.clear()
+            self.input_devices.clear()
+
+            # Заполнение устройств вывода
+            for i, device in enumerate(devices):
+                if device['max_output_channels'] > 0:
+                    self.output_devices.addItem(device['name'], i)
+
+            # Заполнение устройств ввода
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    self.input_devices.addItem(device['name'], i)
+
+            # Установка текущих устройств
+            default_output = sd.default.device[1]
+            default_input = sd.default.device[0]
+
+            if default_output is not None:
+                index = self.output_devices.findData(default_output)
+                if index >= 0:
+                    self.output_devices.setCurrentIndex(index)
+
+            if default_input is not None:
+                index = self.input_devices.findData(default_input)
+                if index >= 0:
+                    self.input_devices.setCurrentIndex(index)
+
+        except Exception as e:
+            self.logMessage(f"Ошибка при получении списка аудио устройств: {str(e)}")
 
     def initUI(self):
         self.setWindowTitle('Голосовой ассистент')
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1000, 700)
 
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        layout = QVBoxLayout(main_widget)
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QVBoxLayout(central_widget)
 
-        # Верхняя панель с кнопками
+        # Верхняя панель
         top_panel = QWidget()
         top_layout = QHBoxLayout(top_panel)
 
+        self.theme_button = QPushButton()
+        self.theme_button.setIcon(QIcon('light.png'))
+        self.theme_button.clicked.connect(self.toggle_theme)
+        self.theme_button.setFixedSize(40, 40)
+
         self.status_label = QLabel("Статус: Готов к работе")
-        self.status_label.setStyleSheet("""
-                QLabel {
-                    color: #2196F3;
-                    font-weight: bold;
-                    font-size: 14px;
-                    padding: 5px;
-                    background: #E3F2FD;
-                    border-radius: 4px;
-                }
-            """)
-        top_layout.addWidget(self.status_label)
-
-        settings_button = QPushButton('Настройки')
-        settings_button.clicked.connect(self.showSettings)
-        settings_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #2196F3;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #1976D2;
-                }
-            """)
-        top_layout.addWidget(settings_button)
-
-        layout.addWidget(top_panel)
-
-        # Кнопки управления
-        control_panel = QWidget()
-        control_layout = QHBoxLayout(control_panel)
+        self.status_label.setStyleSheet("padding: 5px; border-radius: 4px;")
 
         self.start_button = QPushButton('Начать прослушивание')
         self.start_button.clicked.connect(self.startListening)
-        self.start_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #4CAF50;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    min-width: 150px;
-                }
-                QPushButton:hover {
-                    background-color: #45a049;
-                }
-                QPushButton:disabled {
-                    background-color: #cccccc;
-                }
-            """)
 
         self.stop_button = QPushButton('Остановить')
         self.stop_button.clicked.connect(self.stopListening)
         self.stop_button.setEnabled(False)
-        self.stop_button.setStyleSheet("""
-                QPushButton {
-                    background-color: #f44336;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    min-width: 150px;
-                }
-                QPushButton:hover {
-                    background-color: #da190b;
-                }
-                QPushButton:disabled {
-                    background-color: #cccccc;
-                }
-            """)
 
-        control_layout.addWidget(self.start_button)
-        control_layout.addWidget(self.stop_button)
-        layout.addWidget(control_panel)
+        top_layout.addWidget(self.theme_button)
+        top_layout.addWidget(self.status_label)
+        top_layout.addStretch()
+        top_layout.addWidget(self.start_button)
+        top_layout.addWidget(self.stop_button)
 
-        # Добавить текстовую панель ввода команд
-        text_input_panel = QWidget()
-        text_input_layout = QHBoxLayout(text_input_panel)
+        main_layout.addWidget(top_panel)
+
+        # Вкладки
+        self.tab_widget = QTabWidget()
+
+        # Вкладка команд
+        self.commands_tab = QWidget()
+        self.setup_commands_tab()
+        self.tab_widget.addTab(self.commands_tab, "Редактор команд")
+
+        # Вкладка настроек
+        self.settings_tab = QWidget()
+        self.setup_settings_tab()
+        self.tab_widget.addTab(self.settings_tab, "Настройки")
+
+        # Вкладка журнала
+        self.log_tab = QWidget()
+        self.setup_log_tab()
+        self.tab_widget.addTab(self.log_tab, "Журнал")
+
+        main_layout.addWidget(self.tab_widget)
+
+        self.apply_theme(self.current_theme)
+
+    def setup_commands_tab(self):
+        layout = QVBoxLayout(self.commands_tab)
+
+        # Панель инструментов для команд
+        tools_layout = QHBoxLayout()
+
+        add_btn = QPushButton('Добавить команду')
+        add_btn.setIcon(QIcon('add.png'))  # Добавьте соответствующую иконку
+        add_btn.setIconSize(QSize(20, 20))
+        add_btn.setMinimumWidth(150)
+        add_btn.clicked.connect(self.addCommand)
+
+        remove_btn = QPushButton('Удалить команду')
+        remove_btn.setIcon(QIcon('remove.png'))  # Добавьте соответствующую иконку
+        remove_btn.setIconSize(QSize(20, 20))
+        remove_btn.setMinimumWidth(150)
+        remove_btn.clicked.connect(self.removeCommand)
+
+        tools_layout.addWidget(add_btn)
+        tools_layout.addWidget(remove_btn)
+        tools_layout.addStretch()
+
+        layout.addLayout(tools_layout)
+
+        # Таблица команд
+        self.command_table = QTableWidget()
+        self.command_table.setColumnCount(3)
+        self.command_table.setHorizontalHeaderLabels(['Категория', 'Команда', 'Действие'])
+
+        # Настройка внешнего вида таблицы
+        self.command_table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid #ddd;
+                border-radius: 6px;
+                background-color: transparent;
+                gridline-color: #f0f0f0;
+            }
+            QTableWidget::item {
+                padding: 5px;
+                border-bottom: 1px solid #f0f0f0;
+            }
+            QTableWidget::item:selected {
+                background-color: #e3f2fd;
+                color: #1976D2;
+            }
+            QHeaderView::section {
+                background-color: #f5f5f5;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #ddd;
+                font-weight: bold;
+            }
+            QTableWidget::item:hover {
+                background-color: #f5f5f5;
+            }
+        """)
+
+        # Настройка заголовков таблицы
+        header = self.command_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+
+        # Дополнительные настройки таблицы
+        self.command_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.command_table.setSelectionMode(QTableWidget.SingleSelection)
+        self.command_table.setShowGrid(False)
+        self.command_table.verticalHeader().setVisible(False)
+        self.command_table.setFocusPolicy(Qt.StrongFocus)
+
+        # Добавляем поиск
+        search_layout = QHBoxLayout()
+        search_label = QLabel("Поиск:")
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Введите текст для поиска...")
+        self.search_input.textChanged.connect(self.filterCommands)
+
+        search_layout.addWidget(search_label)
+        search_layout.addWidget(self.search_input)
+
+        layout.addLayout(search_layout)
+        layout.addWidget(self.command_table)
+
+    def filterCommands(self, text):
+        """Фильтрация команд в таблице"""
+        for row in range(self.command_table.rowCount()):
+            match = False
+            for column in range(self.command_table.columnCount()):
+                item = self.command_table.item(row, column)
+                if item and text.lower() in item.text().lower():
+                    match = True
+                    break
+            self.command_table.setRowHidden(row, not match)
+
+    def updateCommandTable(self):
+        """Обновленный метод заполнения таблицы"""
+        self.command_table.setRowCount(0)
+        row = 0
+        for category, commands in self.commands.items():
+            for command, action in commands.items():
+                self.command_table.insertRow(row)
+
+                # Создаем и настраиваем элементы таблицы
+                category_item = QTableWidgetItem(category)
+                command_item = QTableWidgetItem(command)
+                action_item = QTableWidgetItem(action)
+
+                # Устанавливаем выравнивание и стили
+                category_item.setTextAlignment(Qt.AlignCenter)
+                command_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+                action_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+                # Добавляем элементы в таблицу
+                self.command_table.setItem(row, 0, category_item)
+                self.command_table.setItem(row, 1, command_item)
+                self.command_table.setItem(row, 2, action_item)
+
+                row += 1
+
+        # Подгоняем размеры столбцов
+        self.command_table.resizeColumnsToContents()
+
+    def setupContextMenu(self):
+        self.command_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.command_table.customContextMenuRequested.connect(self.showContextMenu)
+
+    def showContextMenu(self, position):
+        menu = QMenu()
+        edit_action = menu.addAction("Редактировать")
+        delete_action = menu.addAction("Удалить")
+        copy_action = menu.addAction("Копировать")
+
+        action = menu.exec_(self.command_table.mapToGlobal(position))
+
+        if action == edit_action:
+            self.editCurrentCommand()
+        elif action == delete_action:
+            self.removeCommand()
+        elif action == copy_action:
+            self.copyCommand()
+
+    def setup_settings_tab(self):
+        layout = QVBoxLayout(self.settings_tab)
+
+        form_layout = QFormLayout()
+
+        # Настройки голоса
+        self.voice_speed = QSpinBox()
+        self.voice_speed.setRange(50, 300)
+        form_layout.addRow('Скорость речи:', self.voice_speed)
+
+        self.voice_volume = QSpinBox()
+        self.voice_volume.setRange(0, 100)
+        form_layout.addRow('Громкость речи (%):', self.voice_volume)
+
+        # Настройки системы
+        self.autostart = QCheckBox('Запускать при старте Windows')
+        form_layout.addRow(self.autostart)
+
+        self.minimize_to_tray = QCheckBox('Сворачивать в трей')
+        form_layout.addRow(self.minimize_to_tray)
+
+        # Настройки языка
+        self.language = QComboBox()
+        self.language.addItems(['Русский', 'English'])
+        form_layout.addRow('Язык распознавания:', self.language)
+
+        # Аудио устройства
+        self.output_devices = QComboBox()
+        self.input_devices = QComboBox()
+        form_layout.addRow('Устройство вывода:', self.output_devices)
+        form_layout.addRow('Устройство ввода:', self.input_devices)
+
+        layout.addLayout(form_layout)
+
+        # Кнопка применения настроек
+        apply_btn = QPushButton('Применить настройки')
+        apply_btn.clicked.connect(self.applySettings)
+        layout.addWidget(apply_btn)
+        layout.addStretch()
+
+    def setup_log_tab(self):
+        layout = QVBoxLayout(self.log_tab)
+
+        # Лог
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        layout.addWidget(self.log_text)
+
+        # Панель ввода команд
+        input_panel = QWidget()
+        input_layout = QHBoxLayout(input_panel)
 
         self.command_input = CommandTextEdit(self)
         self.command_input.setMaximumHeight(50)
         self.command_input.setPlaceholderText("Введите команду здесь...")
-        self.command_input.setStyleSheet("""
-            QTextEdit {
-                background-color: white;
-                border: 1px solid #ddd;
-                border-radius: 4px;
-                padding: 5px;
-            }
-        """)
 
-        send_button = QPushButton('Отправить')
-        send_button.clicked.connect(self.sendTextCommand)
-        send_button.setStyleSheet("""
-            QPushButton {
-                background-color: #2196F3;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1976D2;
-            }
-        """)
+        send_btn = QPushButton('Отправить')
+        send_btn.clicked.connect(self.sendTextCommand)
 
-        text_input_layout.addWidget(self.command_input)
-        text_input_layout.addWidget(send_button)
-        layout.addWidget(text_input_panel)
+        input_layout.addWidget(self.command_input)
+        input_layout.addWidget(send_btn)
 
-        # Таблица команд
-        commands_label = QLabel("Список доступных команд:")
-        commands_label.setStyleSheet("font-weight: bold; font-size: 12px;")
-        layout.addWidget(commands_label)
+        layout.addWidget(input_panel)
 
-        self.command_table = QTableWidget()
-        self.command_table.setColumnCount(3)
-        self.command_table.setHorizontalHeaderLabels(['Категория', 'Команда', 'Действие'])
-        self.command_table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self.command_table)
+    def toggle_theme(self):
+        self.current_theme = "dark" if self.current_theme == "light" else "light"
+        self.apply_theme(self.current_theme)
+        self.saveSettings()
 
-        # Кнопки управления командами
-        command_buttons = QWidget()
-        command_buttons_layout = QHBoxLayout(command_buttons)
+    def apply_theme(self, theme):
+        if theme == "light":
+            self.setStyleSheet(self.theme_manager.light_theme)
+            self.theme_button.setIcon(QIcon('dark.png'))
+        else:
+            self.setStyleSheet(self.theme_manager.dark_theme)
+            self.theme_button.setIcon(QIcon('light.png'))
 
-        add_command_btn = QPushButton('Добавить команду')
-        add_command_btn.clicked.connect(self.addCommand)
-        add_command_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #2196F3;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #1976D2;
-                }
-            """)
+    def applySettings(self):
+        try:
+            # Применяем настройки голосового движка
+            self.engine.setProperty('rate', self.voice_speed.value())
+            self.engine.setProperty('volume', self.voice_volume.value() / 100)
 
-        remove_command_btn = QPushButton('Удалить команду')
-        remove_command_btn.clicked.connect(self.removeCommand)
-        remove_command_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #f44336;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-                QPushButton:hover {
-                    background-color: #da190b;
-                }
-            """)
+            # Установка языка распознавания
+            if self.language.currentText() == 'Русский':
+                self.voice_thread.recognition_language = 'ru-RU'
+            else:
+                self.voice_thread.recognition_language = 'en-US'
 
-        command_buttons_layout.addWidget(add_command_btn)
-        command_buttons_layout.addWidget(remove_command_btn)
-        layout.addWidget(command_buttons)
+            # Настройка автозапуска
+            key = reg.HKEY_CURRENT_USER
+            key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
-        # Лог распознавания
-        self.log_text = QTextEdit()
-        self.log_text.setReadOnly(True)
-        self.log_text.setStyleSheet("""
-                QTextEdit {
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                    background-color: white;
-                    font-family: Consolas, Monaco, monospace;
-                    padding: 5px;
-                }
-            """)
-        layout.addWidget(self.log_text)
+            try:
+                registry_key = reg.OpenKey(key, key_path, 0, reg.KEY_ALL_ACCESS)
+                if self.autostart.isChecked():
+                    reg.SetValueEx(registry_key, "VoiceAssistant", 0, reg.REG_SZ, sys.argv[0])
+                else:
+                    try:
+                        reg.DeleteValue(registry_key, "VoiceAssistant")
+                    except WindowsError:
+                        pass
+                reg.CloseKey(registry_key)
+            except WindowsError:
+                self.logMessage("Не удалось настроить автозапуск")
+
+            # Сохранение настроек в файл
+            self.saveSettings()
+
+            # Обновление устройств ввода-вывода
+            if hasattr(self, 'output_devices') and hasattr(self, 'input_devices'):
+                output_device_index = self.output_devices.currentData()
+                input_device_index = self.input_devices.currentData()
+
+                if output_device_index is not None:
+                    sd.default.device[1] = output_device_index
+                if input_device_index is not None:
+                    sd.default.device[0] = input_device_index
+                    self.voice_thread.microphone = None  # Сброс микрофона для переинициализации
+
+            QMessageBox.information(self, "Успех", "Настройки успешно применены")
+            self.logMessage("Настройки применены")
+
+        except Exception as e:
+            QMessageBox.warning(self, "Ошибка", f"Не удалось применить настройки: {str(e)}")
+            self.logMessage(f"Ошибка при применении настроек: {str(e)}")
 
     def initVoiceAssistant(self):
         self.voice_thread = VoiceThread()
@@ -506,70 +587,46 @@ class MainWindow(QMainWindow):
         try:
             with open('settings.json', 'r', encoding='utf-8') as f:
                 settings = json.load(f)
-                self.applySettings(settings)
+                self.current_theme = settings.get('theme', 'light')
+                self.voice_speed.setValue(settings.get('voice_speed', 180))
+                self.voice_volume.setValue(settings.get('voice_volume', 100))
+                self.autostart.setChecked(settings.get('autostart', False))
+                self.minimize_to_tray.setChecked(settings.get('minimize_to_tray', True))
+                self.language.setCurrentText(settings.get('language', 'Русский'))
+
+                self.apply_theme(self.current_theme)
         except FileNotFoundError:
-            pass
+            self.setDefaultSettings()
 
-    def showSettings(self):
-        settings_dialog = SettingsDialog(self)
-        settings_dialog.exec_()
+    def saveSettings(self):
+        settings = {
+            'theme': self.current_theme,
+            'voice_speed': self.voice_speed.value(),
+            'voice_volume': self.voice_volume.value(),
+            'autostart': self.autostart.isChecked(),
+            'minimize_to_tray': self.minimize_to_tray.isChecked(),
+            'language': self.language.currentText(),
+            'output_device': {
+                'name': self.output_devices.currentText(),
+                'index': self.output_devices.currentData()
+            },
+            'input_device': {
+                'name': self.input_devices.currentText(),
+                'index': self.input_devices.currentData()
+            }
+        }
 
-    def sendTextCommand(self):
-        text = self.command_input.toPlainText().strip().lower()
-        if text:
-            self.logMessage(f"Введена команда: {text}")
-            self.executeCommand(text)
-            self.command_input.clear()
+        with open('settings.json', 'w', encoding='utf-8') as f:
+            json.dump(settings, f, ensure_ascii=False, indent=4)
 
-    def applySettings(self, settings):
-        if hasattr(self, 'engine'):
-            self.engine.setProperty('rate', settings['voice_speed'])
-            self.engine.setProperty('volume', settings['voice_volume'] / 100)
-
-            try:
-                sd.default.device[1] = settings['output_device']['index']
-            except Exception as e:
-                logging.error(f"Ошибка при установке устройства вывода: {str(e)}")
-
-        if hasattr(self, 'voice_thread'):
-            if settings['language'] == 'Русский':
-                self.voice_thread.recognition_language = 'ru-RU'
-            else:
-                self.voice_thread.recognition_language = 'en-US'
-
-            try:
-                input_device_index = settings['input_device']['index']
-                sd.default.device[0] = input_device_index
-                self.voice_thread.microphone = sr.Microphone(device_index=input_device_index)
-            except Exception as e:
-                logging.error(f"Ошибка при установке устройства ввода: {str(e)}")
-
-            self.voice_thread.recognizer.dynamic_energy_threshold = settings['noise_reduction']
-
-        if settings['autostart']:
-            self.setupAutostart()
-        else:
-            self.removeAutostart()
-
-        self.minimize_to_tray = settings['minimize_to_tray']
-        self.logMessage("Настройки применены")
-
-    def setupAutostart(self):
-        key = reg.OpenKey(reg.HKEY_CURRENT_USER,
-                            r"Software\Microsoft\Windows\CurrentVersion\Run",
-                            0, reg.KEY_SET_VALUE)
-        reg.SetValueEx(key, "VoiceAssistant", 0, reg.REG_SZ, sys.argv[0])
-        reg.CloseKey(key)
-
-    def removeAutostart(self):
-        try:
-            key = reg.OpenKey(reg.HKEY_CURRENT_USER,
-                                r"Software\Microsoft\Windows\CurrentVersion\Run",
-                                0, reg.KEY_SET_VALUE)
-            reg.DeleteValue(key, "VoiceAssistant")
-            reg.CloseKey(key)
-        except WindowsError:
-            pass
+    def setDefaultSettings(self):
+        self.current_theme = "light"
+        self.voice_speed.setValue(180)
+        self.voice_volume.setValue(100)
+        self.autostart.setChecked(False)
+        self.minimize_to_tray.setChecked(True)
+        self.language.setCurrentText('Русский')
+        self.apply_theme(self.current_theme)
 
     def startListening(self):
         self.start_button.setEnabled(False)
@@ -732,7 +789,6 @@ class CommandTextEdit(QTextEdit):
         else:
             super().keyPressEvent(event)
 
-
 class CommandConstructorDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -830,7 +886,7 @@ class CommandConstructorDialog(QDialog):
 
     def browseApplication(self):
         file_name, _ = QFileDialog.getOpenFileName(self, 'Выберите приложение', '',
-                                                   'Executable files (*.exe);;All files (*.*)')
+                                                    'Executable files (*.exe);;All files (*.*)')
         if file_name:
             self.app_path_input.setText(file_name)
 
@@ -873,35 +929,6 @@ def main():
 
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
-
-    # Установка общего стиля приложения
-    app.setStyleSheet("""
-                QMainWindow {
-                    background-color: #f5f5f5;
-                }
-                QLabel {
-                    color: #333333;
-                }
-                QTableWidget {
-                    background-color: white;
-                    border: 1px solid #dddddd;
-                    border-radius: 4px;
-                }
-                QTableWidget::item {
-                    padding: 4px;
-                }
-                QHeaderView::section {
-                    background-color: #f0f0f0;
-                    padding: 4px;
-                    border: 1px solid #dddddd;
-                    font-weight: bold;
-                }
-                QTextEdit {
-                    background-color: white;
-                    border: 1px solid #dddddd;
-                    border-radius: 4px;
-                }
-            """)
 
     window = MainWindow()
     window.show()

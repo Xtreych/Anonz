@@ -7,3 +7,4 @@ pywin32==308
 colorama==0.4.6
 PyAudio==0.2.14
 sounddevice==0.5.1
+setuptools==75.3.0
